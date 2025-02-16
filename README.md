@@ -127,11 +127,7 @@ For **reward models**, we offer the **MM-RLHF-RewardBench** (available on Huggin
    ```bash
    python llava/eval/cal_performance_mmreward_bench.py --input_file your_answer_file
    ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=yfzhang114/MM-RLHF&type=Date)](https://star-history.com/#yfzhang114/MM-RLHF&Date)
-
+   
 ## Citation
 
 If you find it useful for your research and applications, please cite related papers/blogs using this BibTeX:
