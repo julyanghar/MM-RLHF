@@ -24,9 +24,6 @@
 
 Our dataset and algorithms enable consistent performance improvements across **10 dimensions** and **27 benchmarks** for open-source MLLMs.
 
-![](docs/teaser.png)
-*Performance gains achieved through alignment training on MM-RLHF and our alignment algorithm (MM-DPO), highlighting significant improvements across various tasks and metrics.*
-
 ### **Key Components**
 
 #### 1. **MM-RLHF Dataset** (```data.jsonl``` in [MM-RLHF Data](https://huggingface.co/datasets/yifanzhang114/MM-RLHF))
