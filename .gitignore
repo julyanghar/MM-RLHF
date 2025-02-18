@@ -57,6 +57,7 @@ scripts/dist_*
 logs/
 submissions/
 cn_scripts/
+test.sh
 internal_project_checkpoints/
 work_dirs
 scripts/i18n/*
