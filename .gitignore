@@ -35,8 +35,6 @@ llavavid
 
 scripts/ref_reward_processed_data_3w_image_margin03.jsonl
 checkpoints
-train_dpo_mixup.py
-train_dpo.py
 upload_file_to_hub.py
 project_checkpoints
 debug_checkpoints
@@ -81,8 +79,6 @@ scripts/i18n
 scripts/i18n_higher_res
 scripts/multi-images
 scratchpad
-train_dpo_mixup.py
-train_dpo.py
 upload_file_to_hub.py
 build/
 playground/*.json
