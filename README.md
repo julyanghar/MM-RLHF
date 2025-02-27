@@ -15,6 +15,8 @@
 
 # The Next Step Forward in Multimodal LLM Alignment
 
+**[2025/02/27]** 🔥 MM-RLHF is now fully supported by [swift](https://github.com/modelscope/ms-swift). Simply process your data using ```scripts/convert_to_swift.py``` and execute the ```scripts/swift.sh``` command to get started.
+
 **[2025/02/10]** 🔥 We are proud to open-source **MM-RLHF**, a comprehensive project for aligning Multimodal Large Language Models (MLLMs) with human preferences. This release includes:
 
 - A **high-quality MLLM alignment dataset**.
