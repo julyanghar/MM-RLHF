@@ -21,10 +21,10 @@
 
 **[2025/02/10]** 🔥 We are proud to open-source **MM-RLHF**, a comprehensive project for aligning Multimodal Large Language Models (MLLMs) with human preferences. This release includes:
 
-- A **high-quality MLLM alignment dataset**.
-- A **strong Critique-Based MLLM reward model** and its training algorithm.
-- A **novel alignment algorithm MM-DPO**.
-- **Two new benchmarks**.
+- A **high-quality MLLM alignment dataset** (120K samples, created by over 50 experts over two months, including ratings and manual annotations across eight dimensions.).
+- A **strong Critique-Based MLLM reward model** which is trained on human annotations, achieving state-of-the-art (SOTA) performance on public benchmarks.
+- A **novel alignment algorithm MM-DPO**, effectively integrates reward signals to improve the data efficiency of DPO training..
+- **Two new benchmarks** designed for the reward model and multimodal safety, addressing gaps in existing benchmarks in these areas..
 
 Our dataset and algorithms enable consistent performance improvements across **10 dimensions** and **27 benchmarks** for open-source MLLMs.
 
