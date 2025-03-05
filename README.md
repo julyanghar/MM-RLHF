@@ -3,7 +3,7 @@
 </p>
 
 <font size=7><div align='center' >  
-[[📖 arXiv Paper](https://arxiv.org/abs/2406.08487)] 
+[[📖 arXiv Paper](https://arxiv.org/abs/2502.10391)] 
 [[📊 MM-RLHF Data](https://huggingface.co/datasets/yifanzhang114/MM-RLHF)] 
 [[📝 Homepage](https://mm-rlhf.github.io/)] 
 
