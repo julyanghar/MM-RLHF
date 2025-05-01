@@ -15,6 +15,8 @@
 
 # The Next Step Forward in Multimodal LLM Alignment
 
+**[2025/05/01]** 🔥 MM-RLHF has now been accepted by ICML 2025.
+
 **[2025/03/04]** 🔥 MM-RLHF is now available on [model scope](https://modelscope.cn/datasets/yifanzhang/MM-RLHF/).
 
 **[2025/02/27]** 🔥 MM-RLHF is now fully supported by [swift](https://github.com/modelscope/ms-swift). Simply process your data using ```scripts/convert_to_swift.py``` and execute the ```scripts/swift.sh``` command to get started.
