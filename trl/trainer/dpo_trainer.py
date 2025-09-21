@@ -405,7 +405,7 @@ class DPOTrainer(Trainer):
                 "collate_fn": self.data_collator,
                 "num_workers": self.args.dataloader_num_workers,
                 "pin_memory": self.args.dataloader_pin_memory,
-                "shuffle": False,
+                # "shuffle": False,
             }
 
             # Prepare dataloader
@@ -420,6 +420,7 @@ class DPOTrainer(Trainer):
             compute_loss_context_manager = torch.cuda.amp.autocast if self._peft_has_been_casted_to_bf16 else nullcontext
 
             for padded_batch in tqdm(iterable=data_loader, desc="Train dataset reference log probs"):
+                padded_batch = self._prepare_inputs(padded_batch)
                 with compute_loss_context_manager(), torch.no_grad():
                     reference_chosen_logp, reference_rejected_logp = self.compute_reference_log_probs(padded_batch)
                     mix_reference_chosen_logp, mix_reference_rejected_logp = None, None
@@ -806,9 +807,17 @@ class DPOTrainer(Trainer):
                     return tensor
                 A = all_gather_tensor(logits.detach())
                 mean = torch.mean(A)
-                std = torch.std(A)
+                std = torch.std(A, unbiased = False)
+                # yilin
+                # if torch.isnan(std):
+                #     std = 0
+
                 weight_sample = torch.exp(-0.5 * ((A - mean) / (std + 1e-7)).pow(2))
                 sample_num = int(weight_sample.numel() * (1 - 0.2) )
+                
+                # yilin
+                if sample_num <= 0:
+                    sample_num = 1
                 sample_index = torch.multinomial(weight_sample, sample_num, replacement=False)
                 one_hot_like = torch.zeros_like(weight_sample)
                 one_hot_like[sample_index] = 1
@@ -914,6 +923,7 @@ class DPOTrainer(Trainer):
 
         We do this to avoid doing two forward passes, because it's faster for FSDP.
         """
+        # 把input合并成一个tensor，label也合并成一个tensor，便于处理
         concatenated_batch = self.concatenated_inputs(
             batch,
             is_encoder_decoder=self.is_encoder_decoder,
@@ -935,24 +945,25 @@ class DPOTrainer(Trainer):
             use_cache=False,
             dpo_forward=True,
         )
-        all_logits = all_logits.to(torch.float32)
-        all_logps = self.get_batch_logps(
-            all_logits,
-            new_labels,
-            average_log_prob=self.loss_type == "ipo",
-            is_encoder_decoder=self.is_encoder_decoder,
-            label_pad_token_id=self.label_pad_token_id,
-        )
+        with torch.profiler.record_function("here?"):
+            all_logits = all_logits.to(torch.float32)
+            all_logps = self.get_batch_logps(
+                all_logits,
+                new_labels,
+                average_log_prob=self.loss_type == "ipo",
+                is_encoder_decoder=self.is_encoder_decoder,
+                label_pad_token_id=self.label_pad_token_id,
+            )
 
-        chosen_logps = all_logps[:len_chosen]
-        rejected_logps = all_logps[len_chosen:]
+            chosen_logps = all_logps[:len_chosen]
+            rejected_logps = all_logps[len_chosen:]
 
 
-        chosen_logits = all_logits[:len_chosen]
-        rejected_logits = all_logits[len_chosen:]
+            chosen_logits = all_logits[:len_chosen]
+            rejected_logits = all_logits[len_chosen:]
 
-        chosen_labels = new_labels[:len_chosen]
-        rejected_labels = new_labels[len_chosen:]
+            chosen_labels = new_labels[:len_chosen]
+            rejected_labels = new_labels[len_chosen:]
 
         return (chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_labels, rejected_labels)
 
@@ -968,6 +979,8 @@ class DPOTrainer(Trainer):
         2. all gather metrics
         """
         metrics = {}
+
+        # chosen_inputs和chosen_label是否与RM阶段一样？
 
         (
             policy_chosen_logps,
@@ -1100,10 +1113,13 @@ class DPOTrainer(Trainer):
         compute_loss_context_manager = torch.cuda.amp.autocast if self._peft_has_been_casted_to_bf16 else nullcontext
 
         # Helper function to truncate inputs
-        def truncate_inputs(inputs):
+        def truncate_inputs(inputs, truncated_length = 10):
             for key in ["chosen_input_ids", "chosen_labels", "rejected_input_ids", "rejected_labels", "chosen_attention_mask", "rejected_attention_mask"]:
                 if key in inputs:
-                    inputs[key] = inputs[key][:, :10]  # Retain only the first 10 elements
+                    inputs[key] = inputs[key][:, :truncated_length]  # Retain only the first 10 elements
+        
+        # yilin 先节约内存
+        # truncate_inputs(inputs, 10)
 
         with compute_loss_context_manager():
             # Compute the main loss

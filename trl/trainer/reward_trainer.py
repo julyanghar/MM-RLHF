@@ -188,6 +188,9 @@ class RewardTrainer(Trainer):
             preprocess_logits_for_metrics,
         )
 
+        # 这个地方可以加写入ls_factor的逻辑
+
+
     def log(self, logs: Dict[str, float]) -> None:
         """
         Log `logs` on the various objects watching training, including stored metrics.

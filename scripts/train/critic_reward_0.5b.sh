@@ -1,8 +1,6 @@
 export OMP_NUM_THREADS=8
 export NCCL_IB_DISABLE=0
 export NCCL_IB_GID_INDEX=3
-export NCCL_IB_DISABLE=1
-
 # export NCCL_IB_HCA=${ARNOLD_RDMA_DEVICE}
 export NCCL_SOCKET_IFNAME=eth0
 export NCCL_DEBUG=INFO
@@ -10,46 +8,50 @@ export NCCL_DEBUG=INFO
 VISION_MODEL_VERSION="google/siglip-so400m-patch14-384"
 VISION_MODEL_VERSION_CLEAN="${VISION_MODEL_VERSION//\//_}"
 
+# DPO Stage
+PROMPT_VERSION="qwen_1_5"
+
+# 换一个小模型？
+# SFT_MODEL="lmms-lab/llava-onevision-qwen2-7b-ov"
+SFT_MODEL="lmms-lab/llava-onevision-qwen2-0.5b-ov"
+
+EPOCH=1
+# DPO_RUN_NAME="llava-ov-reward-qwen2-7b-ov_mmrlhf-epoch${EPOCH}"
+DPO_RUN_NAME="llava-onevision-qwen2-0.5b-ov_mmrlhf-epoch${EPOCH}"
+DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
+OUTPUT_DIR="./output/${DPO_CLEAN_NAME}"
+DATA_PATH="/home/yilin/MM-RLHF/MM-RLHF/dpo_pairs.jsonl"
+
 # 手动输入参数
 # yilin
-NUM_GPUS=2
+NUM_GPUS=1
 NNODES=1
 PORT=6379
 RANK=0
 ADDR="127.0.0.1"
 
-# CUDA_VISIBLE_DEVICES=7
 # 似乎有效
 unset NCCL_SOCKET_IFNAME
 
-# DPO Stage
-PROMPT_VERSION="qwen_1_5"
-SFT_MODEL="lmms-lab/llava-onevision-qwen2-7b-ov"
-EPOCH=1
-beta=0.1
-ls_factor_weight=0.1
-DPO_RUN_NAME="llava-onevision-qwen2-7b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
-DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
-OUTPUT_DIR="./output/DPO/${DPO_CLEAN_NAME}"
-DATA_PATH="/home/yilin/RL-MLLM/MM-RLHF/output/ref-data.jsonl"
-IMAGE_FOLDER="/home/yilin/MM-RLHF/" 
-VIDEO_FOLDER="/home/yilin/MM-RLHF/"
-
-
 echo $DPO_RUN_NAME
 
+ACCELERATE_CPU_AFFINITY=1 
+IMAGE_FOLDER="/home/yilin/MM-RLHF/MM-RLHF" 
+VIDEO_FOLDER="/home/yilin/MM-RLHF/MM-RLHF" 
 
-# python -m debugpy --connect 5679 $(which torchrun) --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
-ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
+
+# RUNNER="python -m debugpy --connect 5678 $(which torchrun) --nnodes=${NUM_NODE} --nproc_per_node=${GPUS_PER_NODE} --rdzv_id=1 --rdzv_backend=c10d --rdzv_endpoint=${RDZV_ENDPOINT}"
+# torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
+# yilin
+# torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
+python -m debugpy --connect 5679 $(which torchrun) --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
     llava/train/train_dpo.py \
     --deepspeed scripts/zero3.json \
     --model_name_or_path=${SFT_MODEL} \
-    --dpo_alpha 1.0 --beta 0.1 --gamma 0.25 \
-    --ls_factor_weight $ls_factor_weight \
     --version $PROMPT_VERSION \
     --data_path=$DATA_PATH \
-    --image_folder $IMAGE_FOLDER \
-    --video_folder $VIDEO_FOLDER \
+    --image_folder "${IMAGE_FOLDER}" \
+    --video_folder "${VIDEO_FOLDER}" \
     --mm_tunable_parts="mm_mlp_adapter,mm_language_model" \
     --vision_tower ${VISION_MODEL_VERSION} \
     --mm_projector_type mlp2x_gelu \
@@ -67,7 +69,7 @@ ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NN
     --num_train_epochs $EPOCH \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --gradient_accumulation_steps 12 \
+    --gradient_accumulation_steps 24 \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 1000 \
@@ -84,4 +86,8 @@ ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NN
     --lazy_preprocess True \
     --report_to wandb \
     --dataloader_drop_last True \
-    --attn_implementation sdpa
+    --attn_implementation flash_attention_2 \
+    --is_rm True \
+    --critic_rewards_weight 1.0 \
+    --float_rewards_weight 1.0 \
+    --center_rewards_coefficient 0.01 \

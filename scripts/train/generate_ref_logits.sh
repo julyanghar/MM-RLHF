@@ -8,6 +8,18 @@ export NCCL_DEBUG=INFO
 VISION_MODEL_VERSION="google/siglip-so400m-patch14-384"
 VISION_MODEL_VERSION_CLEAN="${VISION_MODEL_VERSION//\//_}"
 
+# 手动输入参数
+# yilin
+NUM_GPUS=2
+NNODES=1
+PORT=6379
+RANK=0
+ADDR="127.0.0.1"
+
+# 似乎有效
+unset NCCL_SOCKET_IFNAME
+
+
 # DPO Stage
 PROMPT_VERSION="qwen_1_5"
 SFT_MODEL="lmms-lab/llava-onevision-qwen2-7b-ov"
@@ -16,12 +28,16 @@ beta=0.1
 ls_factor_weight=0.1
 DPO_RUN_NAME="llava-onevision-qwen2-7b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
 DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
-OUTPUT_DIR="<your-output-folder>/${DPO_CLEAN_NAME}"
-DATA_PATH="<your-data-path>"
-OUTPUT_DATA_PATH="<your-output-data-path>"
+OUTPUT_DIR="./output/${DPO_CLEAN_NAME}"
+DATA_PATH="/home/yilin/MM-RLHF/dpo_pairs.jsonl"
+OUTPUT_DATA_PATH="./output/ref-data"
+IMAGE_FOLDER="/home/yilin/MM-RLHF/" 
+VIDEO_FOLDER="/home/yilin/MM-RLHF/"
+
 
 echo $DPO_RUN_NAME
 
+# python -m debugpy --connect 5679 $(which torchrun) --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
 ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
     llava/train/train_dpo.py \
     --deepspeed scripts/zero2.json \
@@ -30,8 +46,8 @@ ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NN
     --ls_factor_weight $ls_factor_weight \
     --version $PROMPT_VERSION \
     --data_path=$DATA_PATH \
-    --image_folder "<your-image-folder>" \
-    --video_folder "<your-video-folder>" \
+    --image_folder $IMAGE_FOLDER \
+    --video_folder $VIDEO_FOLDER \
     --mm_tunable_parts="mm_mlp_adapter,mm_language_model" \
     --vision_tower ${VISION_MODEL_VERSION} \
     --mm_projector_type mlp2x_gelu \

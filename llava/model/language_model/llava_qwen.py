@@ -99,56 +99,67 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
         rm_forward: Optional[bool] = False,
         cache_position=None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
+        # yilin forward
+        with torch.profiler.record_function("forward"):
+            input_ids_tmp = copy.deepcopy(input_ids)
+            # yilin，这里用到SigLipEncoderLayer模块
+            with torch.profiler.record_function("prepare_inputs_labels_for_multimodal"):
+                if inputs_embeds is None:
+                    (input_ids, position_ids, attention_mask, past_key_values, inputs_embeds, labels) = self.prepare_inputs_labels_for_multimodal(input_ids, position_ids, attention_mask, past_key_values, labels, images, modalities, image_sizes)
+            
+            # 尝试truncate
+            truncated_length = 2000
+            inputs_embeds = inputs_embeds[:,:truncated_length,:]
+            labels = labels[:,:truncated_length]
+            attention_mask = attention_mask[:,:truncated_length]
 
-        input_ids_tmp = copy.deepcopy(input_ids)
-        if inputs_embeds is None:
-            (input_ids, position_ids, attention_mask, past_key_values, inputs_embeds, labels) = self.prepare_inputs_labels_for_multimodal(input_ids, position_ids, attention_mask, past_key_values, labels, images, modalities, image_sizes)
 
-        if dpo_forward or rm_forward:
-            outputs = super().forward(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                inputs_embeds=inputs_embeds,
-                use_cache=use_cache,
-                labels=labels,
-                output_attentions=output_attentions,
-                output_hidden_states=True,
-                return_dict=True,
-            )
+            with torch.profiler.record_function("forward-after-image-encode"):
+                if dpo_forward or rm_forward:
+                    outputs = super().forward(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        past_key_values=past_key_values,
+                        inputs_embeds=inputs_embeds,
+                        use_cache=use_cache,
+                        labels=labels,
+                        output_attentions=output_attentions,
+                        output_hidden_states=True,
+                        return_dict=True,
+                    )
 
-            if rm_forward:
-                hidden_states = outputs.hidden_states[-1]
-                rewards = self.rm_head(hidden_states)
-                batch_size = input_ids_tmp.shape[0]
-                if self.config.pad_token_id is None and batch_size != 1:
-                    raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-                if self.config.pad_token_id is None or attention_mask is None:
-                    sequence_lengths = -1
+                    if rm_forward:
+                        hidden_states = outputs.hidden_states[-1]
+                        rewards = self.rm_head(hidden_states)
+                        batch_size = input_ids_tmp.shape[0]
+                        if self.config.pad_token_id is None and batch_size != 1:
+                            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+                        if self.config.pad_token_id is None or attention_mask is None:
+                            sequence_lengths = -1
+                        else:
+                            sequence_lengths = attention_mask.long().cumsum(dim=-1)[:, -1] - 1
+
+                        rewards = rewards[torch.arange(batch_size, device=rewards.device), sequence_lengths]
+                        return rewards, outputs.loss
+                    else:
+                        hidden_states = outputs.hidden_states[-1]
+                        logits = self.lm_head(hidden_states)
+                        return logits, labels
+
                 else:
-                    sequence_lengths = attention_mask.long().cumsum(dim=-1)[:, -1] - 1
-
-                rewards = rewards[torch.arange(batch_size, device=rewards.device), sequence_lengths]
-                return rewards, outputs.loss
-            else:
-                hidden_states = outputs.hidden_states[-1]
-                logits = self.lm_head(hidden_states)
-                return logits, labels
-
-        else:
-            return super().forward(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                inputs_embeds=inputs_embeds,
-                labels=labels,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
+                    return super().forward(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        past_key_values=past_key_values,
+                        inputs_embeds=inputs_embeds,
+                        labels=labels,
+                        use_cache=use_cache,
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                        return_dict=return_dict,
+                    )
 
     @torch.no_grad()
     def generate(

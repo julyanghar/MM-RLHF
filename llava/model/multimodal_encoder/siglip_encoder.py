@@ -152,7 +152,7 @@ class SigLipVisionEmbeddings(nn.Module):
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
-
+        # yilin：这里conv2d的stride=kernel_size=patch_size，保证每个patch没有重叠，但是大图像拆分多个frame时，会有重叠
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
             out_channels=self.embed_dim,
@@ -367,6 +367,7 @@ class SigLipEncoder(nn.Module):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+    
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -378,19 +379,20 @@ class SigLipEncoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
+            with torch.profiler.record_function("SigLipEncoderLayer"):
+                if self.gradient_checkpointing and self.training:
+                    layer_outputs = self._gradient_checkpointing_func(
+                        encoder_layer.__call__,
+                        hidden_states,
+                        attention_mask,
+                        output_attentions,
+                    )
+                else:
+                    layer_outputs = encoder_layer(
+                        hidden_states,
+                        attention_mask,
+                        output_attentions=output_attentions,
+                    )
 
             hidden_states = layer_outputs[0]
 
@@ -404,7 +406,7 @@ class SigLipEncoder(nn.Module):
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions)
 
-
+# yilin: VisionTransformer
 class SigLipVisionTransformer(nn.Module):
     def __init__(self, config: SigLipVisionConfig):
         super().__init__()
@@ -430,15 +432,17 @@ class SigLipVisionTransformer(nn.Module):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        # yilin:SigLipVisionEmbeddings
+        with torch.profiler.record_function("SigLipVisionEmbeddings"):
+            hidden_states = self.embeddings(pixel_values)
 
-        hidden_states = self.embeddings(pixel_values)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        with torch.profiler.record_function("SigLipEncoder"):
+            encoder_outputs = self.encoder(
+                inputs_embeds=hidden_states,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
@@ -534,7 +538,7 @@ class SigLipVisionModel(SigLipPreTrainedModel):
             return_dict=return_dict,
         )
 
-
+# yilin:VisionTower
 class SigLipVisionTower(nn.Module):
     def __init__(self, vision_tower, vision_tower_cfg, delay_load=False):
         super().__init__()

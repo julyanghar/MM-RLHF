@@ -18,7 +18,7 @@ overall_stats = {"accuracy": 0, "acc_plus": 0, "total": 0}
 # 用于存储每个id的items
 id_to_items = defaultdict(list)
 
-# 读取数据并分类
+# 读取数据并分类(每个ID对应一个问题，但是一个ID会有多个回答)
 with open(input_file, "r") as infile:
     for line in infile:
         item = json.loads(line.strip())

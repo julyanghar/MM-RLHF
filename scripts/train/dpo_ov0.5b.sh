@@ -7,8 +7,11 @@ export NCCL_IB_DISABLE=1
 export NCCL_SOCKET_IFNAME=eth0
 export NCCL_DEBUG=INFO
 
+
+
 VISION_MODEL_VERSION="google/siglip-so400m-patch14-384"
 VISION_MODEL_VERSION_CLEAN="${VISION_MODEL_VERSION//\//_}"
+
 
 # 手动输入参数
 # yilin
@@ -18,31 +21,39 @@ PORT=6379
 RANK=0
 ADDR="127.0.0.1"
 
-# CUDA_VISIBLE_DEVICES=7
+# 设定gpu
+# export CUDA_VISIBLE_DEVICES=3
+
 # 似乎有效
 unset NCCL_SOCKET_IFNAME
 
+
 # DPO Stage
 PROMPT_VERSION="qwen_1_5"
-SFT_MODEL="lmms-lab/llava-onevision-qwen2-7b-ov"
-EPOCH=1
+# SFT_MODEL="lmms-lab/llava-onevision-qwen2-0.5b-ov"
+SFT_MODEL="/home/yilin/RL-MLLM/MM-RLHF/output/DPO/llava-onevision-qwen2-0.5b-ov_mmrlhf-w0.1-beta0.1-epoch1/"
+EPOCH=2
 beta=0.1
 ls_factor_weight=0.1
-DPO_RUN_NAME="llava-onevision-qwen2-7b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
+DPO_RUN_NAME="llava-onevision-qwen2-0.5b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
 DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
-OUTPUT_DIR="./output/DPO/${DPO_CLEAN_NAME}"
-DATA_PATH="/home/yilin/RL-MLLM/MM-RLHF/output/ref-data.jsonl"
-IMAGE_FOLDER="/home/yilin/MM-RLHF/" 
-VIDEO_FOLDER="/home/yilin/MM-RLHF/"
+OUTPUT_DIR="output/DPO/${DPO_CLEAN_NAME}"
+# DATA_PATH="/home/yilin/MM-RLHF/MM-RLHF/dpo_pairs.jsonl"
+DATA_PATH="/home/yilin/RL-MLLM/MM-RLHF/output/ref-data-0.5b.jsonl"
+IMAGE_FOLDER="/home/yilin/MM-RLHF-Data/" 
+VIDEO_FOLDER="/home/yilin/MM-RLHF-Data/"
+
+
+
 
 
 echo $DPO_RUN_NAME
-
+# --deepspeed scripts/zero2.json \
 
 # python -m debugpy --connect 5679 $(which torchrun) --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
 ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
     llava/train/train_dpo.py \
-    --deepspeed scripts/zero3.json \
+    --deepspeed scripts/zero2.json \
     --model_name_or_path=${SFT_MODEL} \
     --dpo_alpha 1.0 --beta 0.1 --gamma 0.25 \
     --ls_factor_weight $ls_factor_weight \
@@ -81,7 +92,14 @@ ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NN
     --model_max_length 32768 \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
+    --dataloader_pin_memory True \
     --lazy_preprocess True \
     --report_to wandb \
     --dataloader_drop_last True \
-    --attn_implementation sdpa
+    --attn_implementation sdpa \
+    --seed 0 \
+    --data_seed 0 \
+    --is_profiler_output False \
+    --profiler_repeat 1 \
+    --profiler_active 25 \
+    --is_key_avg_output False \

@@ -57,6 +57,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 from packaging import version
 from typing import Any
 
+from torch.profiler import profile, ProfilerActivity
+
 local_rank = None
 import numpy as np
 
@@ -188,6 +190,12 @@ class TrainingArguments(transformers.TrainingArguments):
     ref_data: str = field(default="tmp/MMPreference_image3w.pkl", metadata={"help": "Path to the pre-generated logits for ref model"})
     
     ls_factor_weight: float = field(default=0.0, metadata={"help": "w in MM-DPO"})
+    is_profiler_output: bool = field(default=False)
+
+    require_backward: bool = field(default=True)
+    profiler_repeat: int = field(default=3)
+    profiler_active: int = field(default=3)
+    is_key_avg_output: bool = field(default=False)
 
 
 def maybe_zero_3(param, ignore_status=False, name=None):
@@ -520,6 +528,8 @@ def make_conv_rm(prompt, answer, reason, has_image=True):
         formatted_prompt = formatted_prompt.replace(DEFAULT_IMAGE_TOKEN, "").strip()
         formatted_prompt = DEFAULT_IMAGE_TOKEN + "\n" + formatted_prompt
         formatted_prompt = formatted_prompt.strip()
+        # from human代表的是格式化的生成critique的prompt，
+        # gpt表示critique的ground-truth输出
     return [
         {
             "from": "human",
@@ -1096,44 +1106,45 @@ class DPODataset(Dataset):
         return image, image_size, "image"
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-        # TODO: define number of retries somewhere else
-        num_base_retries = 3
-        num_final_retries = 300
+        with torch.profiler.record_function('dataset-get_item'):
+            # TODO: define number of retries somewhere else
+            num_base_retries = 3
+            num_final_retries = 300
 
-        # try the current sample first
-        for attempt_idx in range(num_base_retries):
-            try:
-                sample = self._get_item(i)
-                return sample
-            except Exception as e:
-                # sleep 1s in case it is a cloud disk issue
-                print(f"[Try #{attempt_idx}] Failed to fetch sample {i}. Exception:", e)
-                time.sleep(1)
+            # try the current sample first
+            for attempt_idx in range(num_base_retries):
+                try:
+                    sample = self._get_item(i)
+                    return sample
+                except Exception as e:
+                    # sleep 1s in case it is a cloud disk issue
+                    print(f"[Try #{attempt_idx}] Failed to fetch sample {i}. Exception:", e)
+                    time.sleep(1)
 
-        # try other samples, in case it is file corruption issue
-        for attempt_idx in range(num_base_retries):
-            try:
-                next_index = min(i + 1, len(self.list_data_dict) - 1)
-                # sample_idx = random.choice(range(len(self)))
-                sample = self._get_item(next_index)
-                return sample
-            except Exception as e:
-                # no need to sleep
-                print(f"[Try other #{attempt_idx}] Failed to fetch sample {next_index}. Exception:", e)
-                pass
+            # try other samples, in case it is file corruption issue
+            for attempt_idx in range(num_base_retries):
+                try:
+                    next_index = min(i + 1, len(self.list_data_dict) - 1)
+                    # sample_idx = random.choice(range(len(self)))
+                    sample = self._get_item(next_index)
+                    return sample
+                except Exception as e:
+                    # no need to sleep
+                    print(f"[Try other #{attempt_idx}] Failed to fetch sample {next_index}. Exception:", e)
+                    pass
 
-        # still fail, most likely to be path issue or cloud disk issue, retry the same sample for longer
-        # for attempt_idx in range(num_final_retries):
-        #     try:
-        #         sample = self._get_item(i)
-        #         return sample
-        #     except Exception as e:
-        #         # sleep 1s in case it is a cloud disk issue
-        #         print(f"[Final try #{attempt_idx}] Failed to fetch sample {i}. Exception:", e)
-        #         time.sleep(1)
+            # still fail, most likely to be path issue or cloud disk issue, retry the same sample for longer
+            # for attempt_idx in range(num_final_retries):
+            #     try:
+            #         sample = self._get_item(i)
+            #         return sample
+            #     except Exception as e:
+            #         # sleep 1s in case it is a cloud disk issue
+            #         print(f"[Final try #{attempt_idx}] Failed to fetch sample {i}. Exception:", e)
+            #         time.sleep(1)
 
-        # Finally raise exception on failing.
-        assert False, "Failed to fetch sample."
+            # Finally raise exception on failing.
+            assert False, "Failed to fetch sample."
 
     def _get_item(self, i) -> Dict[str, torch.Tensor]:
         sources = self.list_data_dict[i]
@@ -1238,8 +1249,7 @@ class DPODataset(Dataset):
 class DPODataCollator(DPODataCollatorWithPadding):
     """Collate examples for DPO fine-tuning."""
 
-    # tokenizer: transformers.PreTrainedTokenizer
-
+    # tokenizer: transformers.PreTrainedTokenizer    
     def collate(self, batch):
         padded_batch = {}
         for k in batch[0].keys():
@@ -1312,53 +1322,54 @@ class DPODataCollator(DPODataCollatorWithPadding):
         return batch
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # yilin
+        with torch.profiler.record_function("collator"):
+            tokenized_batch = []
+            Xs, keys = [], []
+            for feature in features:
+                prompt = feature["prompt"]
+                chosen = feature["chosen"]
+                rejected = feature["rejected"]
+                has_image = feature["has_image"]
+                
+                if self.is_rm and 'chosen_reason' in feature:
+                    chosen_reason = feature["chosen_reason"]
+                    rejected_reason = feature["rejected_reason"]
+                else:
+                    chosen_reason, rejected_reason = None, None
 
-        tokenized_batch = []
-        Xs, keys = [], []
-        for feature in features:
-            prompt = feature["prompt"]
-            chosen = feature["chosen"]
-            rejected = feature["rejected"]
-            has_image = feature["has_image"]
-            
-            if self.is_rm and 'chosen_reason' in feature:
-                chosen_reason = feature["chosen_reason"]
-                rejected_reason = feature["rejected_reason"]
-            else:
-                chosen_reason, rejected_reason = None, None
+                batch_element = self.tokenize_batch_element(prompt, chosen, rejected, has_image=has_image, chosen_reason=chosen_reason, rejected_reason=rejected_reason)
+                batch_element['no_critic'] = True if self.is_rm and 'chosen_reason' not in feature.keys() else False
+                
+                if "reference_chosen_logp" in feature and "reference_rejected_logp" in feature:
+                    batch_element["reference_chosen_logp"] = feature["reference_chosen_logp"]
+                    batch_element["reference_rejected_logp"] = feature["reference_rejected_logp"]
+                if "mix_reference_chosen_logp" in feature and "mix_reference_rejected_logp" in feature:
+                    batch_element["mix_reference_chosen_logp"] = feature["mix_reference_chosen_logp"]
+                    batch_element["mix_reference_rejected_logp"] = feature["mix_reference_rejected_logp"]
+                if "is_tie" in feature:
+                    batch_element['is_tie'] = feature['is_tie']
+                batch_element['ls_factor'] = feature['ls_factor']
+                tokenized_batch.append(batch_element)
 
-            batch_element = self.tokenize_batch_element(prompt, chosen, rejected, has_image=has_image, chosen_reason=chosen_reason, rejected_reason=rejected_reason)
-            batch_element['no_critic'] = True if self.is_rm and 'chosen_reason' not in feature.keys() else False
-            
-            if "reference_chosen_logp" in feature and "reference_rejected_logp" in feature:
-                batch_element["reference_chosen_logp"] = feature["reference_chosen_logp"]
-                batch_element["reference_rejected_logp"] = feature["reference_rejected_logp"]
-            if "mix_reference_chosen_logp" in feature and "mix_reference_rejected_logp" in feature:
-                batch_element["mix_reference_chosen_logp"] = feature["mix_reference_chosen_logp"]
-                batch_element["mix_reference_rejected_logp"] = feature["mix_reference_rejected_logp"]
-            if "is_tie" in feature:
-                batch_element['is_tie'] = feature['is_tie']
-            batch_element['ls_factor'] = feature['ls_factor']
-            tokenized_batch.append(batch_element)
-
-        # return collated batch
-        padded_batch = self.collate(tokenized_batch)
-        # import pdb;pdb.set_trace()
-        if "image" in features[0]:
-            images = [instance["image"] for instance in features]
-
-            padded_batch["image_sizes"] = [im[1] for im_list in images for im in im_list]
-            padded_batch["modalities"] = [im[2] for im_list in images for im in im_list]
-            images = [im[0] for im_list in images for im in im_list]
+            # return collated batch
+            padded_batch = self.collate(tokenized_batch)
             # import pdb;pdb.set_trace()
+            if "image" in features[0]:
+                images = [instance["image"] for instance in features]
 
-            padded_batch["images"] = images
-            if 'mix_image' in features[0]:
-                mix_images = [instance["mix_image"] for instance in features]
-                mix_images = [im[0] for im_list in mix_images for im in im_list]
-                padded_batch["mix_images"] = mix_images
+                padded_batch["image_sizes"] = [im[1] for im_list in images for im in im_list]
+                padded_batch["modalities"] = [im[2] for im_list in images for im in im_list]
+                images = [im[0] for im_list in images for im in im_list]
+                # import pdb;pdb.set_trace()
 
-        return padded_batch
+                padded_batch["images"] = images
+                if 'mix_image' in features[0]:
+                    mix_images = [instance["mix_image"] for instance in features]
+                    mix_images = [im[0] for im_list in mix_images for im in im_list]
+                    padded_batch["mix_images"] = mix_images
+
+            return padded_batch
 
 
 def make_dpo_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
@@ -1579,7 +1590,7 @@ def train(attn_implementation=None):
                 ),
             )
         )
-
+    # 
     model, ref_model = get_model(model_args, training_args, bnb_model_from_pretrained_args)
     model.config.use_cache = False
 
@@ -1799,6 +1810,7 @@ def train(attn_implementation=None):
                         module = module.to(torch.bfloat16)
 
     train_dataset = make_dpo_data_module(tokenizer=tokenizer, data_args=data_args)
+    # 校对dataset
     data_collator = DPODataCollator(
         tokenizer,
         label_pad_token_id=IGNORE_INDEX,
@@ -1806,6 +1818,10 @@ def train(attn_implementation=None):
         is_rm=model_args.is_rm
     )
     
+    # yilin
+    if not training_args.require_backward:
+        model.requires_grad_(False)
+
     if model_args.is_rm:
         model.config.pad_token_id = tokenizer.pad_token_id
         trainer = LLaVARMTrainer(
@@ -1839,6 +1855,8 @@ def train(attn_implementation=None):
         trainer.train(resume_from_checkpoint=True)
     else:
         trainer.train()
+
+
     trainer.save_state()
 
     model.config.use_cache = True
@@ -1854,6 +1872,7 @@ def train(attn_implementation=None):
             model.save_pretrained(training_args.output_dir, state_dict=state_dict)
             torch.save(non_lora_state_dict, os.path.join(training_args.output_dir, "non_lora_trainables.bin"))
     else:
+        print('final save')
         safe_save_model_for_hf_trainer(trainer=trainer, output_dir=training_args.output_dir)
 
     rank0_print(f"Model saved to {training_args.output_dir}")

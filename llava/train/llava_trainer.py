@@ -478,7 +478,7 @@ class LLaVARMTrainer(RewardTrainer):
             )
         else:
             return super()._get_train_sampler()
-
+    
     def _save_checkpoint(self, model, trial, metrics=None):
         if getattr(self.args, "tune_mm_mlp_adapter", False) or (
             hasattr(self.args, "mm_tunable_parts") and (len(self.args.mm_tunable_parts.split(",")) == 1 and ("mm_mlp_adapter" in self.args.mm_tunable_parts or "mm_vision_resampler" in self.args.mm_tunable_parts))
