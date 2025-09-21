@@ -31,9 +31,9 @@ ls_factor_weight=0.1
 DPO_RUN_NAME="llava-onevision-qwen2-7b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
 DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
 OUTPUT_DIR="./output/DPO/${DPO_CLEAN_NAME}"
-DATA_PATH="/home/yilin/RL-MLLM/MM-RLHF/output/ref-data.jsonl"
-IMAGE_FOLDER="/home/yilin/MM-RLHF/" 
-VIDEO_FOLDER="/home/yilin/MM-RLHF/"
+DATA_PATH="/home/yilin/MM-RLHF/output/ref-data.jsonl"
+IMAGE_FOLDER="/home/yilin/MM-RLHF-Data/" 
+VIDEO_FOLDER="/home/yilin/MM-RLHF-Data/"
 
 
 echo $DPO_RUN_NAME

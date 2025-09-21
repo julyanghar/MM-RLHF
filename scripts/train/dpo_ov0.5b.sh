@@ -39,7 +39,7 @@ DPO_RUN_NAME="llava-onevision-qwen2-0.5b-ov_mmrlhf-w${ls_factor_weight}-beta${be
 DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
 OUTPUT_DIR="output/DPO/${DPO_CLEAN_NAME}"
 # DATA_PATH="/home/yilin/MM-RLHF/MM-RLHF/dpo_pairs.jsonl"
-DATA_PATH="/home/yilin/RL-MLLM/MM-RLHF/output/ref-data-0.5b.jsonl"
+DATA_PATH="/home/yilin/MM-RLHF/output/ref-data-0.5b.jsonl"
 IMAGE_FOLDER="/home/yilin/MM-RLHF-Data/" 
 VIDEO_FOLDER="/home/yilin/MM-RLHF-Data/"
 

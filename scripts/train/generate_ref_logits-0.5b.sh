@@ -29,13 +29,13 @@ ls_factor_weight=0.1
 DPO_RUN_NAME="llava-onevision-qwen2-0.5b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
 DPO_CLEAN_NAME="${DPO_RUN_NAME##*/}"
 OUTPUT_DIR="./output/${DPO_CLEAN_NAME}"
-DATA_PATH="/home/yilin/MM-RLHF/dpo_pairs.jsonl"
+DATA_PATH="/home/yilin/MM-RLHF-Data/dpo_pairs.jsonl"
 OUTPUT_DATA_PATH="./output/ref-data-0.5b.jsonl"
 # generate时，OUTPUT_DATA_PATH不应该有数据，有数据会进入train从而报错？
 # OUTPUT_DATA_PATH="/home/yilin/MM-RLHF/output/ref-data"
 
-IMAGE_FOLDER="/home/yilin/MM-RLHF/" 
-VIDEO_FOLDER="/home/yilin/MM-RLHF/"
+IMAGE_FOLDER="/home/yilin/MM-RLHF-Data/" 
+VIDEO_FOLDER="/home/yilin/MM-RLHF-Data/"
 
 
 echo $DPO_RUN_NAME

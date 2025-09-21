@@ -107,11 +107,12 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
                 if inputs_embeds is None:
                     (input_ids, position_ids, attention_mask, past_key_values, inputs_embeds, labels) = self.prepare_inputs_labels_for_multimodal(input_ids, position_ids, attention_mask, past_key_values, labels, images, modalities, image_sizes)
             
-            # 尝试truncate
-            truncated_length = 2000
-            inputs_embeds = inputs_embeds[:,:truncated_length,:]
-            labels = labels[:,:truncated_length]
-            attention_mask = attention_mask[:,:truncated_length]
+            # yilin
+            # # 尝试truncate
+            # truncated_length = 2000
+            # inputs_embeds = inputs_embeds[:,:truncated_length,:]
+            # labels = labels[:,:truncated_length]
+            # attention_mask = attention_mask[:,:truncated_length]
 
 
             with torch.profiler.record_function("forward-after-image-encode"):
