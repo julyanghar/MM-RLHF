@@ -405,7 +405,7 @@ class DPOTrainer(Trainer):
                 "collate_fn": self.data_collator,
                 "num_workers": self.args.dataloader_num_workers,
                 "pin_memory": self.args.dataloader_pin_memory,
-                # "shuffle": False,
+                "shuffle": False,
             }
 
             # Prepare dataloader
@@ -945,25 +945,25 @@ class DPOTrainer(Trainer):
             use_cache=False,
             dpo_forward=True,
         )
-        with torch.profiler.record_function("here?"):
-            all_logits = all_logits.to(torch.float32)
-            all_logps = self.get_batch_logps(
-                all_logits,
-                new_labels,
-                average_log_prob=self.loss_type == "ipo",
-                is_encoder_decoder=self.is_encoder_decoder,
-                label_pad_token_id=self.label_pad_token_id,
-            )
+        # with torch.profiler.record_function("here?"):
+        all_logits = all_logits.to(torch.float32)
+        all_logps = self.get_batch_logps(
+            all_logits,
+            new_labels,
+            average_log_prob=self.loss_type == "ipo",
+            is_encoder_decoder=self.is_encoder_decoder,
+            label_pad_token_id=self.label_pad_token_id,
+        )
 
-            chosen_logps = all_logps[:len_chosen]
-            rejected_logps = all_logps[len_chosen:]
+        chosen_logps = all_logps[:len_chosen]
+        rejected_logps = all_logps[len_chosen:]
 
 
-            chosen_logits = all_logits[:len_chosen]
-            rejected_logits = all_logits[len_chosen:]
+        chosen_logits = all_logits[:len_chosen]
+        rejected_logits = all_logits[len_chosen:]
 
-            chosen_labels = new_labels[:len_chosen]
-            rejected_labels = new_labels[len_chosen:]
+        chosen_labels = new_labels[:len_chosen]
+        rejected_labels = new_labels[len_chosen:]
 
         return (chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_labels, rejected_labels)
 
