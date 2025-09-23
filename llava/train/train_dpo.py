@@ -81,7 +81,7 @@ class ModelArguments:
     tune_mm_vision_resampler: bool = field(default=False)
     vision_tower: Optional[str] = field(default=None)
     vision_tower_pretrained: Optional[str] = field(default=None)  # default to the last layer
-
+    # 这里冻结vision_tower
     unfreeze_mm_vision_tower: bool = field(default=False)
     unfreeze_language_model: bool = field(default=False)
     mm_vision_select_layer: Optional[int] = field(default=-1)  # default to the last layer

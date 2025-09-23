@@ -103,7 +103,9 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
         with torch.profiler.record_function("forward"):
             input_ids_tmp = copy.deepcopy(input_ids)
             # yilin，这里用到SigLipEncoderLayer模块
-            with torch.profiler.record_function("prepare_inputs_labels_for_multimodal"):
+            # with torch.profiler.record_function("prepare_inputs_labels_for_multimodal"):
+            # with torch.autograd.profiler.emit_nvtx(): 
+            with torch.cuda.nvtx.range("prepare_inputs_labels_for_multimodal"):  
                 if inputs_embeds is None:
                     (input_ids, position_ids, attention_mask, past_key_values, inputs_embeds, labels) = self.prepare_inputs_labels_for_multimodal(input_ids, position_ids, attention_mask, past_key_values, labels, images, modalities, image_sizes)
             

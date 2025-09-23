@@ -30,9 +30,10 @@ unset NCCL_SOCKET_IFNAME
 
 # DPO Stage
 PROMPT_VERSION="qwen_1_5"
-# SFT_MODEL="lmms-lab/llava-onevision-qwen2-0.5b-ov"
-SFT_MODEL="/home/yilin/RL-MLLM/MM-RLHF/output/DPO/llava-onevision-qwen2-0.5b-ov_mmrlhf-w0.1-beta0.1-epoch1/"
-EPOCH=2
+# SFT_MODEL="lmms-lab/llava-onevision-qwen2-7b-ov"
+SFT_MODEL="lmms-lab/llava-onevision-qwen2-0.5b-ov"
+# SFT_MODEL="/home/yilin/MM-RLHF/output/DPO/llava-onevision-qwen2-0.5b-ov_mmrlhf-w0.1-beta0.1-epoch2/"
+EPOCH=7
 beta=0.1
 ls_factor_weight=0.1
 DPO_RUN_NAME="llava-onevision-qwen2-0.5b-ov_mmrlhf-w${ls_factor_weight}-beta${beta}-epoch${EPOCH}"
@@ -51,7 +52,17 @@ echo $DPO_RUN_NAME
 # --deepspeed scripts/zero2.json \
 
 # python -m debugpy --connect 5679 $(which torchrun) --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
-ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
+# ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
+
+DURATION=50
+
+ACCELERATE_CPU_AFFINITY=1
+nsys profile \
+    --output=/home/yilin/MM-RLHF/trace_torchrun \
+    --trace=cuda,nvtx,osrt \
+    --duration=$DURATION \
+    --force-overwrite true \
+    torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NNODES}" --node_rank="${RANK}" --master_addr="${ADDR}" --master_port="${PORT}" \
     llava/train/train_dpo.py \
     --deepspeed scripts/zero2.json \
     --model_name_or_path=${SFT_MODEL} \
@@ -83,7 +94,7 @@ ACCELERATE_CPU_AFFINITY=1 torchrun --nproc_per_node="${NUM_GPUS}" --nnodes="${NN
     --save_strategy "steps" \
     --save_steps 1000 \
     --save_total_limit 1 \
-    --learning_rate 1e-6 \
+    --learning_rate 1e-11 \
     --weight_decay 0. \
     --warmup_ratio 0.1 \
     --lr_scheduler_type "cosine" \

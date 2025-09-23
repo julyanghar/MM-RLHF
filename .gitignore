@@ -36,6 +36,7 @@ traces/
 flash_attn-2.1.0+cu121torch2.1cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 *.whl
 output/
+*.nsys-rep
 
 scripts/ref_reward_processed_data_3w_image_margin03.jsonl
 checkpoints
